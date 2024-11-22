@@ -11,23 +11,25 @@ use args::Args;
 #[tokio::main]
 async fn main() -> eyre::Result<()> {
     let args = Args::parse();
-    tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::new(args.log_level.as_str()))
-        .init();
+
+    let env_filter = EnvFilter::builder()
+        .with_default_directive(args.log_level.into())
+        .from_env_lossy();
+    tracing_subscriber::fmt().with_env_filter(env_filter).init();
 
     let listener = TcpListener::bind(SocketAddr::from(([0, 0, 0, 0], args.port))).await?;
-    tracing::info!("Listening on {}", listener.local_addr()?);
 
     // Add Cross-Origin Resource Sharing (CORS) middleware to the application
     let cors_layer = CorsLayer::new()
         .allow_origin(Any)
         .allow_methods(Any)
-        .allow_headers(Any)
-        .allow_credentials(true);
+        .allow_headers(Any);
 
     let app = axum::Router::new()
         .route("/", axum::routing::get(|| async { "Hello, world!" }))
         .layer(cors_layer);
+
+    tracing::info!("Listening on {}", listener.local_addr()?);
     axum::serve(listener, app).await?;
 
     Ok(())
