@@ -1,7 +1,11 @@
+use axum::{routing, Router};
 use clap::Parser;
 use std::net::SocketAddr;
 use tokio::net::TcpListener;
-use tower_http::cors::{Any, CorsLayer};
+use tower_http::{
+    cors::{Any, CorsLayer},
+    trace::{DefaultMakeSpan, TraceLayer},
+};
 use tracing_subscriber::EnvFilter;
 
 mod args;
@@ -25,9 +29,13 @@ async fn main() -> eyre::Result<()> {
         .allow_methods(Any)
         .allow_headers(Any);
 
-    let app = axum::Router::new()
-        .route("/", axum::routing::get(|| async { "Hello, world!" }))
-        .layer(cors_layer);
+    // Trace requests to the application
+    let trace_layer = TraceLayer::new_for_http().make_span_with(DefaultMakeSpan::default());
+
+    let app = Router::new()
+        .route("/", routing::get(|| async { "Hello, world!" }))
+        .layer(cors_layer)
+        .layer(trace_layer);
 
     tracing::info!("Listening on {}", listener.local_addr()?);
     axum::serve(listener, app).await?;
