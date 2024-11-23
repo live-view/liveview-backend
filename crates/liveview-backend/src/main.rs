@@ -1,6 +1,7 @@
+use std::{net::SocketAddr, sync::Arc};
+
 use axum::{routing, Router};
 use clap::Parser;
-use std::net::SocketAddr;
 use tokio::net::TcpListener;
 use tower_http::{
     cors::{Any, CorsLayer},
@@ -9,8 +10,10 @@ use tower_http::{
 use tracing_subscriber::EnvFilter;
 
 mod args;
+mod state;
 
 use args::Args;
+use state::AppState;
 
 #[tokio::main]
 async fn main() -> eyre::Result<()> {
@@ -23,6 +26,9 @@ async fn main() -> eyre::Result<()> {
 
     let listener = TcpListener::bind(SocketAddr::from(([0, 0, 0, 0], args.port))).await?;
 
+    // Create a new state for the application
+    let app_state = Arc::new(AppState {});
+
     // Add Cross-Origin Resource Sharing (CORS) middleware to the application
     let cors_layer = CorsLayer::new()
         .allow_origin(Any)
@@ -34,6 +40,7 @@ async fn main() -> eyre::Result<()> {
 
     let app = Router::new()
         .route("/", routing::get(|| async { "Hello, world!" }))
+        .with_state(Arc::clone(&app_state))
         .layer(cors_layer)
         .layer(trace_layer);
 
