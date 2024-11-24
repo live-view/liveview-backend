@@ -1,3 +1,11 @@
 {
-    "cSpell.words": ["liveview", "MSVC", "rustc", "serde"]
+    "cSpell.words": [
+        "liveview",
+        "MSVC",
+        "rustc",
+        "serde",
+        "socketioxide",
+        "statemachine",
+        "tungstenite"
+    ]
 }
