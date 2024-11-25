@@ -2,7 +2,7 @@ use std::{net::SocketAddr, sync::Arc};
 
 use clap::Parser;
 use socketioxide::SocketIo;
-use tokio::{net::TcpListener, sync::Mutex};
+use tokio::net::TcpListener;
 use tower_http::{
     cors::CorsLayer,
     trace::{DefaultMakeSpan, TraceLayer},
@@ -25,8 +25,12 @@ async fn main() -> eyre::Result<()> {
         .from_env_lossy();
     tracing_subscriber::fmt().with_env_filter(env_filter).init();
 
+    let provider = alloy::providers::ProviderBuilder::new()
+        .on_builtin(&args.rpc_url)
+        .await?;
+
     // Create a new state for the application
-    let app_state = Arc::new(Mutex::new(AppState { count: 0 }));
+    let app_state = Arc::new(AppState { provider });
 
     // Create a new Socket.IO layer
     let (socket_layer, socket_io) = SocketIo::builder()

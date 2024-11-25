@@ -1,7 +1,9 @@
 {
     "cSpell.words": [
+        "chrono",
         "liveview",
         "MSVC",
+        "oneshot",
         "rustc",
         "serde",
         "socketioxide",
