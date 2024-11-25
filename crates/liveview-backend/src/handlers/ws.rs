@@ -71,6 +71,8 @@ pub(crate) async fn ws(socket: SocketRef, state: SocketState<Arc<AppState>>) {
             tokio::spawn(async move {
                 loop {
                     tokio::select! {
+                        biased; // Check for task cancellation first
+
                         _ = rx.changed() => {
                             tracing::debug!(?socket.id, "Task cancelled");
 
