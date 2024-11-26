@@ -19,7 +19,12 @@ futures-util.workspace = true
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 socketioxide = { workspace = true, features = ["tracing", "state"] }
-tokio = { workspace = true, features = ["macros", "rt-multi-thread", "sync"] }
+tokio = { workspace = true, features = [
+    "macros",
+    "rt-multi-thread",
+    "sync",
+    "fs",
+] }
 tokio-tungstenite.workspace = true
 tower-http = { workspace = true, features = ["cors", "trace"] }
 tracing.workspace = true

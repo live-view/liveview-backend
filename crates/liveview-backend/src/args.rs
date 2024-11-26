@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use clap::Parser;
 use tracing::Level;
 
@@ -8,9 +10,9 @@ pub(crate) struct Args {
     #[arg(short, long, env = "PORT", default_value_t = 8000)]
     pub(crate) port: u16,
 
-    /// RPC endpoint
-    #[arg(short, long, env = "RPC_URL", visible_alias = "rpc")]
-    pub(crate) rpc_url: String,
+    /// Path to the data directory
+    #[arg(short, long, env = "DATA_PATH", visible_alias = "data")]
+    pub(crate) data_path: PathBuf,
 
     /// Log filter level
     #[arg(short, long,env="RUST_LOG", default_value_t = Level::INFO)]

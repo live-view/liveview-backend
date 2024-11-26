@@ -4,10 +4,12 @@
         "liveview",
         "MSVC",
         "oneshot",
+        "QWHL",
         "rustc",
         "serde",
         "socketioxide",
         "statemachine",
-        "tungstenite"
+        "tungstenite",
+        "uwclf"
     ]
 }

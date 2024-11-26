@@ -27,13 +27,13 @@ pub(crate) struct RequestData {
     pub(crate) addresses: Vec<String>,
 }
 
-#[derive(Debug, Serialize, Clone)]
+#[derive(Serialize)]
 pub(crate) struct ResponseData {
     pub(crate) id: SocketSid,
-    pub(crate) timestamp: chrono::DateTime<chrono::Utc>,
     pub(crate) chain: Chain,
-    pub(crate) addresses: Vec<String>,
     pub(crate) block_number: u64,
+    pub(crate) timestamp: chrono::DateTime<chrono::Utc>,
+    pub(crate) addresses: Vec<String>,
 }
 
 pub(crate) async fn ws(socket: SocketRef, state: SocketState<Arc<AppState>>) {
@@ -56,8 +56,17 @@ pub(crate) async fn ws(socket: SocketRef, state: SocketState<Arc<AppState>>) {
                 tx.send(()).ok();
             });
 
+            let provider = match data.chain {
+                Chain::Mainnet => Arc::clone(&state.mainnet),
+                Chain::Base => Arc::clone(&state.base),
+                Chain::Arbitrum => Arc::clone(&state.arbitrum),
+                Chain::Optimism => Arc::clone(&state.optimism),
+                Chain::Polygon => Arc::clone(&state.polygon),
+                Chain::BSC => Arc::clone(&state.bsc),
+            };
+
             // Create a subscription to blocks
-            let sub = match state.provider.subscribe_blocks().await {
+            let sub = match provider.subscribe_blocks().await {
                 Ok(sub) => sub,
                 Err(e) => {
                     tracing::error!(error = ?e, ?socket.id, "Failed to subscribe to blocks");
@@ -82,10 +91,10 @@ pub(crate) async fn ws(socket: SocketRef, state: SocketState<Arc<AppState>>) {
                         Some(block) = stream.next() => {
                              let response_data = ResponseData {
                                 id: socket.id,
-                                timestamp: chrono::Utc::now(),
-                                chain: data.chain.to_owned(),
-                                addresses: data.addresses.to_owned(),
                                 block_number: block.number,
+                                chain: data.chain.to_owned(),
+                                timestamp: chrono::Utc::now(),
+                                addresses: data.addresses.to_owned(),
                             };
 
                            socket.emit("response", &response_data).ok();
