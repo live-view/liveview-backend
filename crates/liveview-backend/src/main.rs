@@ -15,6 +15,7 @@ use tracing_subscriber::EnvFilter;
 mod args;
 mod data;
 mod handlers;
+mod interfaces;
 mod state;
 
 use args::Args;
