@@ -11,7 +11,7 @@ use tokio::sync::watch;
 
 use crate::state::AppState;
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Deserialize)]
 pub(crate) enum Chain {
     Mainnet,
     Base,
@@ -21,19 +21,19 @@ pub(crate) enum Chain {
     BSC,
 }
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Deserialize)]
 pub(crate) struct RequestData {
     pub(crate) chain: Chain,
     pub(crate) addresses: Vec<String>,
 }
 
-#[derive(Serialize)]
+#[derive(Debug, Serialize)]
 pub(crate) struct ResponseData {
     pub(crate) id: SocketSid,
-    pub(crate) chain: Chain,
+    // pub(crate) chain: Chain,
     pub(crate) block_number: u64,
     pub(crate) timestamp: chrono::DateTime<chrono::Utc>,
-    pub(crate) addresses: Vec<String>,
+    // pub(crate) addresses: Vec<String>,
 }
 
 pub(crate) async fn ws(socket: SocketRef, state: SocketState<Arc<AppState>>) {
@@ -92,9 +92,9 @@ pub(crate) async fn ws(socket: SocketRef, state: SocketState<Arc<AppState>>) {
                              let response_data = ResponseData {
                                 id: socket.id,
                                 block_number: block.number,
-                                chain: data.chain.to_owned(),
+                                // chain: data.chain.to_owned(),
                                 timestamp: chrono::Utc::now(),
-                                addresses: data.addresses.to_owned(),
+                                // addresses: data.addresses.to_owned(),
                             };
 
                            socket.emit("response", &response_data).ok();

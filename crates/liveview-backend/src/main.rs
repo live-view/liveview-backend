@@ -2,12 +2,14 @@ use std::{net::SocketAddr, sync::Arc};
 
 use alloy::providers::ProviderBuilder;
 use clap::Parser;
+use eyre::Context;
 use socketioxide::SocketIo;
 use tokio::{fs, net::TcpListener};
 use tower_http::{
     cors::CorsLayer,
     trace::{DefaultMakeSpan, TraceLayer},
 };
+use tracing::level_filters::LevelFilter;
 use tracing_subscriber::EnvFilter;
 
 mod args;
@@ -24,11 +26,16 @@ async fn main() -> eyre::Result<()> {
     let args = Args::parse();
 
     let env_filter = EnvFilter::builder()
-        .with_default_directive(args.log_level.into())
+        .with_default_directive(LevelFilter::INFO.into())
         .from_env_lossy();
     tracing_subscriber::fmt().with_env_filter(env_filter).init();
 
-    let data = serde_json::from_str::<Data>(&fs::read_to_string(args.data_path).await?)?;
+    let data = serde_json::from_str::<Data>(
+        &fs::read_to_string(args.data_path)
+            .await
+            .context("Failed to read data file")?,
+    )
+    .context("Failed to parse data file")?;
 
     // Create a new state for the application
     let app_state = Arc::new(AppState {

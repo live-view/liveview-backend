@@ -1,6 +1,6 @@
 use serde::Deserialize;
 
-#[derive(Debug, Deserialize)]
+#[derive(Deserialize)]
 pub(crate) struct Data {
     pub(crate) mainnet: String,
     pub(crate) base: String,
