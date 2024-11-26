@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use alloy::providers::Provider;
+use alloy::{primitives::Address, providers::Provider};
 use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
 use socketioxide::{
@@ -8,10 +8,11 @@ use socketioxide::{
     socket::Sid as SocketSid,
 };
 use tokio::sync::watch;
+use tracing::debug;
 
 use crate::state::AppState;
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 pub(crate) enum Chain {
     Mainnet,
     Base,
@@ -24,34 +25,55 @@ pub(crate) enum Chain {
 #[derive(Debug, Deserialize)]
 pub(crate) struct RequestData {
     pub(crate) chain: Chain,
-    pub(crate) addresses: Vec<String>,
+    pub(crate) addresses: Vec<Address>,
 }
 
 #[derive(Debug, Serialize)]
 pub(crate) struct ResponseData {
     pub(crate) id: SocketSid,
-    // pub(crate) chain: Chain,
+    pub(crate) chain: Chain,
     pub(crate) block_number: u64,
     pub(crate) timestamp: chrono::DateTime<chrono::Utc>,
-    // pub(crate) addresses: Vec<String>,
+    pub(crate) addresses: Vec<Address>,
+}
+
+#[derive(Debug, Serialize)]
+pub(crate) struct ErrorData {
+    pub(crate) id: SocketSid,
+    pub(crate) message: String,
 }
 
 pub(crate) async fn ws(socket: SocketRef, state: SocketState<Arc<AppState>>) {
-    tracing::debug!(ns = socket.ns(), ?socket.id, "Socket.IO connected");
+    debug!(ns = socket.ns(), ?socket.id, "Socket.IO connected");
 
     let state = Arc::clone(&state);
 
     socket.on(
         "request",
         |socket: SocketRef, SocketData::<RequestData>(data)| async move {
-            tracing::debug!(?data, "Received event");
+            debug!(?data, "Received event");
+
+            // If there's no addresses
+            if data.addresses.is_empty() {
+                let message = "No addresses provided".to_owned();
+
+                debug!(?socket.id, ?message);
+
+                let response_data = ErrorData {
+                    id: socket.id,
+                    message,
+                };
+                socket.emit("error", &response_data).ok();
+
+                return;
+            }
 
             // Use a watch channel for graceful task cancellation
             let (tx, mut rx) = watch::channel(());
 
             // Send disconnect event when the task is cancelled
             socket.on_disconnect(move || {
-                tracing::debug!("Socket disconnected");
+                debug!("Socket disconnected");
 
                 tx.send(()).ok();
             });
@@ -68,8 +90,17 @@ pub(crate) async fn ws(socket: SocketRef, state: SocketState<Arc<AppState>>) {
             // Create a subscription to blocks
             let sub = match provider.subscribe_blocks().await {
                 Ok(sub) => sub,
-                Err(e) => {
-                    tracing::error!(error = ?e, ?socket.id, "Failed to subscribe to blocks");
+                Err(_) => {
+                    let message = "Failed to subscribe to blocks".to_owned();
+
+                    debug!(?socket.id, ?message);
+
+                    let response_data = ErrorData {
+                        id: socket.id,
+                        message,
+                    };
+                    socket.emit("error", &response_data).ok();
+
                     return;
                 }
             };
@@ -83,7 +114,7 @@ pub(crate) async fn ws(socket: SocketRef, state: SocketState<Arc<AppState>>) {
                         biased; // Check for task cancellation first
 
                         _ = rx.changed() => {
-                            tracing::debug!(?socket.id, "Task cancelled");
+                            debug!(?socket.id, "Task cancelled");
 
                             // Break the loop when the task is cancelled
                             break;
@@ -92,9 +123,9 @@ pub(crate) async fn ws(socket: SocketRef, state: SocketState<Arc<AppState>>) {
                              let response_data = ResponseData {
                                 id: socket.id,
                                 block_number: block.number,
-                                // chain: data.chain.to_owned(),
+                                chain: data.chain.to_owned(),
                                 timestamp: chrono::Utc::now(),
-                                // addresses: data.addresses.to_owned(),
+                                addresses: data.addresses.to_owned(),
                             };
 
                            socket.emit("response", &response_data).ok();
