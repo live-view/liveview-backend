@@ -20,7 +20,7 @@ mod state;
 
 use args::Args;
 use data::Data;
-use state::AppState;
+use state::{AppState, ChainState};
 
 #[tokio::main]
 async fn main() -> eyre::Result<()> {
@@ -40,12 +40,54 @@ async fn main() -> eyre::Result<()> {
 
     // Create a new state for the application
     let app_state = Arc::new(AppState {
-        mainnet: Arc::new(ProviderBuilder::new().on_builtin(&data.mainnet).await?),
-        base: Arc::new(ProviderBuilder::new().on_builtin(&data.base).await?),
-        arbitrum: Arc::new(ProviderBuilder::new().on_builtin(&data.arbitrum).await?),
-        optimism: Arc::new(ProviderBuilder::new().on_builtin(&data.optimism).await?),
-        polygon: Arc::new(ProviderBuilder::new().on_builtin(&data.polygon).await?),
-        bsc: Arc::new(ProviderBuilder::new().on_builtin(&data.bsc).await?),
+        mainnet: ChainState {
+            multicall_address: data.mainnet.multicall_address,
+            provider: Arc::new(
+                ProviderBuilder::new()
+                    .on_builtin(data.mainnet.rpc_url.as_str())
+                    .await?,
+            ),
+        },
+        base: ChainState {
+            multicall_address: data.base.multicall_address,
+            provider: Arc::new(
+                ProviderBuilder::new()
+                    .on_builtin(data.base.rpc_url.as_str())
+                    .await?,
+            ),
+        },
+        arbitrum: ChainState {
+            multicall_address: data.arbitrum.multicall_address,
+            provider: Arc::new(
+                ProviderBuilder::new()
+                    .on_builtin(data.arbitrum.rpc_url.as_str())
+                    .await?,
+            ),
+        },
+        optimism: ChainState {
+            multicall_address: data.optimism.multicall_address,
+            provider: Arc::new(
+                ProviderBuilder::new()
+                    .on_builtin(data.optimism.rpc_url.as_str())
+                    .await?,
+            ),
+        },
+        polygon: ChainState {
+            multicall_address: data.polygon.multicall_address,
+            provider: Arc::new(
+                ProviderBuilder::new()
+                    .on_builtin(data.polygon.rpc_url.as_str())
+                    .await?,
+            ),
+        },
+        bsc: ChainState {
+            multicall_address: data.bsc.multicall_address,
+            provider: Arc::new(
+                ProviderBuilder::new()
+                    .on_builtin(data.bsc.rpc_url.as_str())
+                    .await?,
+            ),
+        },
     });
 
     // Create a new Socket.IO layer

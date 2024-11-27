@@ -13,3 +13,10 @@ sol!(
     ERC721,
     "abi/ERC721.json",
 );
+
+sol!(
+    #[allow(missing_docs)]
+    #[sol(rpc)]
+    Multicall,
+    "abi/Multicall.json",
+);

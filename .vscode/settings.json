@@ -3,6 +3,7 @@
         "chrono",
         "liveview",
         "MSVC",
+        "multicall",
         "oneshot",
         "QWHL",
         "rustc",
