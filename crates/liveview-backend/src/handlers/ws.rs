@@ -1,10 +1,15 @@
-use std::sync::Arc;
+use std::{
+    collections::{HashMap, HashSet},
+    sync::Arc,
+};
 
 use alloy::{
     primitives::{Address, FixedBytes, U256},
     providers::Provider,
-    sol_types::SolCall,
+    rpc::types::Filter,
+    sol_types::{SolCall, SolEvent},
 };
+use chrono::{NaiveDateTime, Utc};
 use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
 use socketioxide::{
@@ -12,7 +17,7 @@ use socketioxide::{
     socket::Sid as SocketSid,
 };
 use tokio::sync::watch;
-use tracing::debug;
+use tracing::{debug, instrument};
 
 use crate::{
     interfaces::{Multicall, ERC721},
@@ -20,7 +25,7 @@ use crate::{
 };
 
 #[derive(Debug, Deserialize)]
-pub(crate) enum Chain {
+enum Chain {
     Mainnet,
     Base,
     Arbitrum,
@@ -30,24 +35,38 @@ pub(crate) enum Chain {
 }
 
 #[derive(Debug, Deserialize)]
-pub(crate) struct RequestData {
-    pub(crate) chain: Chain,
-    pub(crate) addresses: Vec<Address>,
+struct RequestData {
+    chain: Chain,
+    addresses: Vec<Address>,
 }
 
 #[derive(Debug, Serialize)]
-pub(crate) struct ResponseData {
-    pub(crate) id: SocketSid,
-    pub(crate) block_number: u64,
-    pub(crate) timestamp: chrono::DateTime<chrono::Utc>,
+struct ResponseData {
+    id: SocketSid,
+    address: Address,
+    name: String,
+    symbol: String,
+    from: Address,
+    to: Address,
+    token_id: U256,
+    block_number: u64,
+    transaction_hash: FixedBytes<32>,
+    timestamp: NaiveDateTime,
 }
 
 #[derive(Debug, Serialize)]
-pub(crate) struct ErrorData {
-    pub(crate) id: SocketSid,
-    pub(crate) message: String,
+struct ErrorData {
+    id: SocketSid,
+    message: String,
 }
 
+#[derive(Debug)]
+struct TokenData {
+    name: String,
+    symbol: String,
+}
+
+#[instrument(skip(state))]
 pub(crate) async fn ws(socket: SocketRef, state: SocketState<Arc<AppState>>) {
     debug!(ns = socket.ns(), ?socket.id, "Socket.IO connected");
 
@@ -82,6 +101,15 @@ pub(crate) async fn ws(socket: SocketRef, state: SocketState<Arc<AppState>>) {
                 return;
             }
 
+            // Remove duplicates
+            let data_addresses = data
+                .addresses
+                .to_vec()
+                .drain(..)
+                .collect::<HashSet<_>>()
+                .drain()
+                .collect::<Vec<_>>();
+
             let chain_state = match data.chain {
                 Chain::Mainnet => &state.mainnet,
                 Chain::Base => &state.base,
@@ -101,11 +129,10 @@ pub(crate) async fn ws(socket: SocketRef, state: SocketState<Arc<AppState>>) {
                 Arc::clone(&chain_state.provider),
             );
 
-            let calls = data
-                .addresses
-                .into_iter()
-                .map(|address| Multicall::Call {
-                    target: address,
+            let mut calls = vec![];
+            for addr in &data_addresses {
+                calls.push(Multicall::Call {
+                    target: addr.to_owned(),
                     gasLimit: U256::MAX,
                     callData: erc721
                         .supportsInterface(FixedBytes(
@@ -113,8 +140,18 @@ pub(crate) async fn ws(socket: SocketRef, state: SocketState<Arc<AppState>>) {
                         ))
                         .calldata()
                         .to_owned(),
-                })
-                .collect::<Vec<_>>();
+                });
+                calls.push(Multicall::Call {
+                    target: addr.to_owned(),
+                    gasLimit: U256::MAX,
+                    callData: erc721.name().calldata().to_owned(),
+                });
+                calls.push(Multicall::Call {
+                    target: addr.to_owned(),
+                    gasLimit: U256::MAX,
+                    callData: erc721.symbol().calldata().to_owned(),
+                });
+            }
 
             // Check all addresses for support of ERC721.supportsInterface in multicall
             let multicall_res = match multicall.multicall(calls).call().await {
@@ -134,15 +171,24 @@ pub(crate) async fn ws(socket: SocketRef, state: SocketState<Arc<AppState>>) {
                 }
             };
 
+            let mut token_data = HashMap::new();
+
             // Check if all addresses support the interface
-            for r in multicall_res {
-                let decode_res =
-                    match ERC721::supportsInterfaceCall::abi_decode_returns(&r.returnData, false) {
+            for (i, res) in multicall_res
+                /* 1 for supportsInterface, 1 for name, 1 for symbol */
+                .chunks(3)
+                .enumerate()
+            {
+                // First index is for supportsInterface call
+                let interface_data = res[0].returnData.to_owned();
+                let interface_res =
+                    match ERC721::supportsInterfaceCall::abi_decode_returns(&interface_data, false)
+                    {
                         Ok(res) => res._0,
                         Err(_) => false, // Error means that the address doesn't support the interface
                     };
 
-                if !decode_res {
+                if !interface_res {
                     socket
                         .emit(
                             "error",
@@ -155,24 +201,74 @@ pub(crate) async fn ws(socket: SocketRef, state: SocketState<Arc<AppState>>) {
 
                     return;
                 }
+
+                // Second index in for name
+                let name_data = res[1].returnData.to_owned();
+                let name_res = match ERC721::nameCall::abi_decode_returns(&name_data, false) {
+                    Ok(decode_res) => decode_res._0,
+                    Err(_) => {
+                        socket
+                            .emit(
+                                "error",
+                                &ErrorData {
+                                    id: socket.id,
+                                    message: "Invalid address provided".to_owned(),
+                                },
+                            )
+                            .ok();
+                        return;
+                    }
+                };
+
+                // Third index in for symbol
+                let symbol_data = res[2].returnData.to_owned();
+                let symbol_res = match ERC721::symbolCall::abi_decode_returns(&symbol_data, false) {
+                    Ok(decode_res) => decode_res._0,
+                    Err(_) => {
+                        socket
+                            .emit(
+                                "error",
+                                &ErrorData {
+                                    id: socket.id,
+                                    message: "Invalid address provided".to_owned(),
+                                },
+                            )
+                            .ok();
+                        return;
+                    }
+                };
+
+                token_data.insert(
+                    data_addresses.to_owned()[i],
+                    TokenData {
+                        name: name_res,
+                        symbol: symbol_res,
+                    },
+                );
             }
 
             // Create a subscription to blocks
-            let sub = match chain_state.provider.subscribe_blocks().await {
+            // let sub = match chain_state.provider.subscribe_blocks().await {
+            let filter = Filter::new()
+                .address(data.addresses)
+                .event(ERC721::Transfer::SIGNATURE);
+
+            let sub = match chain_state.provider.subscribe_logs(&filter).await {
                 Ok(sub) => sub,
                 Err(_) => {
-                    let message = "Failed to subscribe to blocks".to_owned();
-
-                    let response_data = ErrorData {
-                        id: socket.id,
-                        message,
-                    };
-                    socket.emit("error", &response_data).ok();
+                    socket
+                        .emit(
+                            "error",
+                            &ErrorData {
+                                id: socket.id,
+                                message: "Failed to subscribe to blocks".to_owned(),
+                            },
+                        )
+                        .ok();
 
                     return;
                 }
             };
-
             // Convert the subscription into a stream
             let mut stream = sub.into_stream();
 
@@ -187,14 +283,31 @@ pub(crate) async fn ws(socket: SocketRef, state: SocketState<Arc<AppState>>) {
                             // Break the loop when the task is cancelled
                             break;
                         },
-                        Some(block) = stream.next() => {
-                             let response_data = ResponseData {
-                                id: socket.id,
-                                block_number: block.number,
-                                timestamp: chrono::Utc::now(),
+                        Some(log) = stream.next() => {
+                            let event = match log.log_decode::<ERC721::Transfer>() {
+                                Ok(event) => event,
+                                Err(_) => continue, // Skip if errors occurs while decoding the event
+                            };
+                            let event_data = event.data();
+
+                            let token = match token_data.get(&event.address()) {
+                                Some(data) => data,
+                                None => unreachable!(),
                             };
 
-                           socket.emit("response", &response_data).ok();
+                            let response_data = ResponseData {
+                                id: socket.id,
+                                address: event.address(),
+                                name: token.name.to_owned(),
+                                symbol: token.symbol.to_owned(),
+                                from: event_data.from,
+                                to: event_data.to,
+                                token_id: event_data.tokenId,
+                                block_number: log.block_number.unwrap_or_default(),
+                                transaction_hash: log.transaction_hash.unwrap_or_default(),
+                                timestamp: Utc::now().naive_utc(),
+                            };
+                            socket.emit("response", &response_data).ok();
                         },
                         else => break, // Break the loop when the stream is closed
                     }
