@@ -120,13 +120,15 @@ pub(crate) async fn ws(socket: SocketRef, state: SocketState<Arc<AppState>>) {
             let multicall_res = match multicall.multicall(calls).call().await {
                 Ok(res) => res.returnData,
                 Err(_) => {
-                    let message = "Failed to call fetch data".to_string();
-
-                    let response_data = ErrorData {
-                        id: socket.id,
-                        message,
-                    };
-                    socket.emit("error", &response_data).ok();
+                    socket
+                        .emit(
+                            "error",
+                            &ErrorData {
+                                id: socket.id,
+                                message: "Failed to call fetch data".to_owned(),
+                            },
+                        )
+                        .ok();
 
                     return;
                 }
