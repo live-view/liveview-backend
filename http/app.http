@@ -1,0 +1,4 @@
+@host = {{$dotenv HOST}}
+
+###
+GET {{host}}/search?address=0xd0650c737ec085c1a5cb6a392f541d69705d87bb&chain=Base

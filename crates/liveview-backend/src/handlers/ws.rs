@@ -20,27 +20,18 @@ use tokio::sync::watch;
 use tracing::{debug, instrument};
 
 use crate::{
+    data::ChainType,
     interfaces::{Multicall, ERC721},
     state::AppState,
 };
 
-#[derive(Debug, Deserialize)]
-enum Chain {
-    Mainnet,
-    Base,
-    Arbitrum,
-    Optimism,
-    Polygon,
-    Bsc,
-}
-
-#[derive(Debug, Deserialize)]
+#[derive(Deserialize)]
 struct RequestData {
-    chain: Chain,
+    chain: ChainType,
     addresses: Vec<Address>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Serialize)]
 struct ResponseData {
     id: SocketSid,
     address: Address,
@@ -75,7 +66,7 @@ pub(crate) async fn ws(socket: SocketRef, state: SocketState<Arc<AppState>>) {
     socket.on(
         "request",
         |socket: SocketRef, SocketData::<RequestData>(data)| async move {
-            debug!(?data, "Received event");
+            // debug!(?data, "Received event");
 
             // Watch channel for disconnection
             let (tx, mut rx) = watch::channel(());
@@ -111,12 +102,12 @@ pub(crate) async fn ws(socket: SocketRef, state: SocketState<Arc<AppState>>) {
                 .collect::<Vec<_>>();
 
             let chain_state = match data.chain {
-                Chain::Mainnet => &state.mainnet,
-                Chain::Base => &state.base,
-                Chain::Arbitrum => &state.arbitrum,
-                Chain::Optimism => &state.optimism,
-                Chain::Polygon => &state.polygon,
-                Chain::Bsc => &state.bsc,
+                ChainType::Mainnet => &state.mainnet,
+                ChainType::Base => &state.base,
+                ChainType::Arbitrum => &state.arbitrum,
+                ChainType::Optimism => &state.optimism,
+                ChainType::Polygon => &state.polygon,
+                ChainType::Bsc => &state.bsc,
             };
 
             // Check if all addresses are correct

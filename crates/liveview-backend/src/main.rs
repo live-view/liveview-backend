@@ -16,6 +16,7 @@ mod args;
 mod data;
 mod handlers;
 mod interfaces;
+mod routes;
 mod state;
 
 use args::Args;
@@ -103,6 +104,7 @@ async fn main() -> eyre::Result<()> {
     let trace_layer = TraceLayer::new_for_http().make_span_with(DefaultMakeSpan::default());
 
     let app = axum::Router::new()
+        .route("/search", axum::routing::get(routes::search::search))
         .layer(socket_layer)
         .with_state(Arc::clone(&app_state))
         .layer(cors_layer)

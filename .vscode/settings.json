@@ -1,6 +1,7 @@
 {
     "cSpell.words": [
         "chrono",
+        "dotenv",
         "liveview",
         "MSVC",
         "multicall",
