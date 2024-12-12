@@ -18,6 +18,7 @@ mod handlers;
 mod interfaces;
 mod routes;
 mod state;
+mod utils;
 
 use args::Args;
 use data::Data;

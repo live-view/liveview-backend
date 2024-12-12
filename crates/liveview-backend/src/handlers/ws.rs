@@ -18,11 +18,13 @@ use socketioxide::{
 };
 use tokio::sync::watch;
 use tracing::{debug, instrument};
+use url::Url;
 
 use crate::{
     data::ChainType,
     interfaces::{Multicall, ERC721},
     state::AppState,
+    utils::{self, MetadataType},
 };
 
 #[derive(Deserialize)]
@@ -40,6 +42,8 @@ struct ResponseData {
     from: Address,
     to: Address,
     token_id: U256,
+    image: Option<String>,
+    image_type: Option<MetadataType>,
     block_number: u64,
     transaction_hash: FixedBytes<32>,
     timestamp: NaiveDateTime,
@@ -55,6 +59,11 @@ struct ErrorData {
 struct TokenData {
     name: String,
     symbol: String,
+}
+
+#[derive(Deserialize)]
+struct Metadata {
+    image: String,
 }
 
 #[instrument(skip(state))]
@@ -115,13 +124,11 @@ pub(crate) async fn ws(socket: SocketRef, state: SocketState<Arc<AppState>>) {
                 chain_state.multicall_address,
                 Arc::clone(&chain_state.provider),
             );
-            let erc721 = ERC721::new(
-                chain_state.multicall_address,
-                Arc::clone(&chain_state.provider),
-            );
 
             let mut calls = vec![];
             for addr in &data_addresses {
+                let erc721 = ERC721::new(addr.to_owned(), Arc::clone(&chain_state.provider));
+
                 calls.push(Multicall::Call {
                     target: addr.to_owned(),
                     gasLimit: U256::MAX,
@@ -263,6 +270,7 @@ pub(crate) async fn ws(socket: SocketRef, state: SocketState<Arc<AppState>>) {
             // Convert the subscription into a stream
             let mut stream = sub.into_stream();
 
+            let provider = Arc::clone(&chain_state.provider);
             tokio::spawn(async move {
                 loop {
                     tokio::select! {
@@ -281,19 +289,51 @@ pub(crate) async fn ws(socket: SocketRef, state: SocketState<Arc<AppState>>) {
                             };
                             let event_data = event.data();
 
-                            let token = match token_data.get(&event.address()) {
+                            let token_data = match token_data.get(&event.address()) {
                                 Some(data) => data,
                                 None => unreachable!(),
+                            };
+
+                            // get token uri
+                            let token = ERC721::new(event.address(), Arc::clone(&provider));
+                            let token_uri = match token.tokenURI(event_data.tokenId).call().await {
+                                Ok(res) => res._0,
+                                Err(_) => continue,
+                            };
+
+                               let metadata_url = match token_uri.parse::<Url>() {
+                                    Ok(url) => url,
+                                    Err(_) =>  continue,
+                                };
+                            
+                            // sanitize metadata url
+                            let metadata = utils::extract_metadata_url(metadata_url);
+                            let (image_url, image_type) = match metadata {
+                                Some((url, MetadataType::Url)) => {
+                                    let res = match reqwest::get(url).await {
+                                        Ok(res) => res,
+                                        Err(_) => continue,
+                                    };
+                                    let metadata = match res.json::<Metadata>().await {
+                                        Ok(metadata) => metadata,
+                                        Err(_) => continue,
+                                    };
+                                    (Some(metadata.image), Some(MetadataType::Url))
+                                },
+                                Some((url, MetadataType::Data)) => (Some(url), Some(MetadataType::Data)),
+                                _ => (None, None),
                             };
 
                             let response_data = ResponseData {
                                 id: socket.id,
                                 address: event.address(),
-                                name: token.name.to_owned(),
-                                symbol: token.symbol.to_owned(),
+                                name: token_data.name.to_owned(),
+                                symbol: token_data.symbol.to_owned(),
                                 from: event_data.from,
                                 to: event_data.to,
                                 token_id: event_data.tokenId,
+                                image: image_url,
+                                image_type: image_type,
                                 block_number: log.block_number.unwrap_or_default(),
                                 transaction_hash: log.transaction_hash.unwrap_or_default(),
                                 timestamp: Utc::now().naive_utc(),

@@ -16,6 +16,7 @@ chrono = { workspace = true, features = ["serde"] }
 clap = { workspace = true, features = ["derive", "env"] }
 eyre.workspace = true
 futures-util.workspace = true
+reqwest = { workspace = true, features = ["json"] }
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 socketioxide = { workspace = true, features = ["tracing", "state"] }
@@ -30,4 +31,3 @@ tower-http = { workspace = true, features = ["cors", "trace"] }
 tracing.workspace = true
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
 url = { workspace = true, features = ["serde"] }
-validator = { version = "0.19.0", features = ["derive"] }
