@@ -9,7 +9,7 @@ use alloy::{
     rpc::types::Filter,
     sol_types::{SolCall, SolEvent},
 };
-use chrono::{NaiveDateTime, Utc};
+use chrono::{DateTime, Utc};
 use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
 use socketioxide::{
@@ -46,7 +46,7 @@ struct ResponseData {
     image_type: Option<MetadataType>,
     block_number: u64,
     transaction_hash: FixedBytes<32>,
-    timestamp: NaiveDateTime,
+    timestamp: DateTime<Utc>,
 }
 
 #[derive(Debug, Serialize)]
@@ -336,7 +336,7 @@ pub(crate) async fn ws(socket: SocketRef, state: SocketState<Arc<AppState>>) {
                                 image_type: image_type,
                                 block_number: log.block_number.unwrap_or_default(),
                                 transaction_hash: log.transaction_hash.unwrap_or_default(),
-                                timestamp: Utc::now().naive_utc(),
+                                timestamp: Utc::now()
                             };
                             socket.emit("response", &response_data).ok();
                         },
