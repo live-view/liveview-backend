@@ -96,7 +96,7 @@ async fn main() -> eyre::Result<()> {
     let (socket_layer, socket_io) = SocketIo::builder()
         .with_state(Arc::clone(&app_state))
         .build_layer();
-    socket_io.ns("/ws", handlers::ws);
+    socket_io.ns("/api/ws", handlers::ws);
 
     // Add Cross-Origin Resource Sharing (CORS) middleware to the application
     let cors_layer = CorsLayer::permissive();
@@ -105,7 +105,7 @@ async fn main() -> eyre::Result<()> {
     let trace_layer = TraceLayer::new_for_http().make_span_with(DefaultMakeSpan::default());
 
     let app = axum::Router::new()
-        .route("/search", axum::routing::get(routes::search::search))
+        .route("/api/search", axum::routing::get(routes::search::search))
         .layer(socket_layer)
         .with_state(Arc::clone(&app_state))
         .layer(cors_layer)
