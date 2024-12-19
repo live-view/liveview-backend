@@ -5,6 +5,7 @@ use clap::Parser;
 use eyre::Context;
 use socketioxide::SocketIo;
 use tokio::{fs, net::TcpListener};
+use tower::ServiceBuilder;
 use tower_http::{
     cors::CorsLayer,
     trace::{DefaultMakeSpan, TraceLayer},
@@ -106,7 +107,12 @@ async fn main() -> eyre::Result<()> {
 
     let app = axum::Router::new()
         .route("/api/search", axum::routing::get(routes::search::search))
-        .layer(socket_layer)
+        // .layer(socket_layer)
+        .layer(
+            ServiceBuilder::new()
+                .layer(CorsLayer::permissive())
+                .layer(socket_layer),
+        )
         .with_state(Arc::clone(&app_state))
         .layer(cors_layer)
         .layer(trace_layer);
